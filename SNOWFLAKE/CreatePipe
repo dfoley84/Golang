@@ -60,7 +60,7 @@ func CreatePipe(user, password, account, clientName, tableName string) {
 		SELECT 
 		%s,
 		CURRENT_TIMESTAMP AS EXPORTDATE
-		FROM @PROD_%s_FUSION_%s_S3_STAGE t
+		FROM @%%s_S3_STAGE t
 	) FILE_FORMAT = (TYPE = 'CSV', FIELD_DELIMITER = ',', RECORD_DELIMITER = '\n', SKIP_HEADER = 1, ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE);
 	`, clientName, clientName, tableName, tableName, columnList, mappedColumnsQuery, clientName, tableName)
 
