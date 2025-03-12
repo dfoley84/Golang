@@ -1,0 +1,71 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"strings"
+
+	_ "github.com/snowflakedb/gosnowflake"
+)
+
+func CreatePipe(user, password, account, clientName, tableName string) {
+	dsn := fmt.Sprintf("%s:%s@%s/%s", user, password, account, ""+strings.ToUpper(clientName)+"")
+	db, err := sql.Open("snowflake", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec("USE SCHEMA TEST")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	query := fmt.Sprintf("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '%s' ORDER BY ORDINAL_POSITION", tableName)
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+
+	var columns []string
+	for rows.Next() {
+		var columnName string
+		if err := rows.Scan(&columnName); err != nil {
+			log.Fatal(err)
+		}
+		columns = append(columns, columnName)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	columnList := strings.Join(columns, ", ")
+
+	var mappedColumns []string
+	for i := range columns {
+		mappedColumns = append(mappedColumns, fmt.Sprintf("t.$%d AS %s", i+1, columns[i]))
+	}
+
+	mappedColumnsQuery := strings.Join(mappedColumns, ",\n")
+
+	//!FIX THIS TO Not Working..
+	pipeQuery := fmt.Sprintf(`
+		CREATE OR REPLACE PIPE %s.
+		AUTO_INGEST = TRUE 
+		ERROR_INTEGRATION = '' 
+		AS COPY INTO %s(%s) FROM (
+		SELECT 
+		%s,
+		CURRENT_TIMESTAMP AS EXPORTDATE
+		FROM @PROD_%s_FUSION_%s_S3_STAGE t
+	) FILE_FORMAT = (TYPE = 'CSV', FIELD_DELIMITER = ',', RECORD_DELIMITER = '\n', SKIP_HEADER = 1, ERROR_ON_COLUMN_COUNT_MISMATCH = TRUE);
+	`, clientName, clientName, tableName, tableName, columnList, mappedColumnsQuery, clientName, tableName)
+
+	_, err = db.Exec(pipeQuery)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
