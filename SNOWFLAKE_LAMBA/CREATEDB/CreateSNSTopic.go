@@ -15,7 +15,7 @@ func CreateSNSTopic(user, password, account, clientName string, region string) {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(`USE SCHEMA FUSION`)
+	_, err = db.Exec(`USE SCHEMA `)
 	if err != nil {
 		log.Fatal(err)
 	}
