@@ -1,0 +1,167 @@
+service: serverless-create-snowflake-table
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: provided.al2023
+  memorySize: 8049
+  timeout: 900
+  region: ${opt:region}
+  stage: ${opt.stage}
+  role: !GetAtt LambdaRole.Arn
+  architecture: arm64
+
+functions:
+  lambda_handler:
+    handler: main
+    disableLogs: true
+    memorySize: 4096
+
+package:
+  exclude:
+    - '**/*'
+  include:
+    - '*.zip'
+
+resources:
+  Resources:
+    LambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        Policies:
+          - PolicyName: Inline
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                   
+                  Resource: '*'
+
+    SystemManagerDocument:
+      Type: AWS::SSM::Document
+      Properties:
+        Content:
+          assumeRole: ${self:custom.env_ssmrole.${opt:stage}}
+          schemaVersion: '0.3'
+          description: 'Create Snowflake DB Connection'
+          parameters:
+            ClientName:
+              type: String
+              description: ClientName to be used for Snowflake DB Creation.
+
+            BucketName:
+              type: String
+              description: Snowflake Bucket to be Used.
+              default:  ${self:custom.env_bucketname.${opt:stage}.${opt:region}}
+              allowedValues:
+                - ${self:custom.env_bucketname.${opt:stage}.${opt:region}}
+            
+            SecertName:
+              type: String
+              description: SecretName to be used for Snowflake DB Creation.
+              default: ${self:custom.env_secert.${opt:stage}.${opt:region}}
+              allowedValues:
+
+
+            fileName:
+              type: String
+              description: fileName to be used for Snowflake DB Creation.
+
+            s3Path:
+              type: String
+              description: s3Path to be used for Snowflake DB Creation.
+            
+            TableName:
+              type: String
+              description: TableName to be used for Snowflake DB Creation.
+              
+          mainSteps:
+            - name: CreateTable
+              action: aws:invokeLambdaFunction
+              timeoutSeconds: '9200'
+              description: 'Create Table for Client'
+              onFailure: Abort
+              inputs:   
+                FunctionName: !Sub serverless-create-snowflake-table-${opt:stage}-lambda_handler
+                InvocationType: RequestResponse
+                Payload: |
+                    {
+                      "ClientName": "{{ClientName}}",
+                      "BucketName": "{{BucketName}}",
+                      "SecertName": "{{SecertName}}",
+                      "fileName": "{{fileName}}",
+                      "s3Path": "{{s3Path}}",
+                      "TableName": "{{TableName}}",
+                      "Action": "create"
+                    }      
+            - name: stage
+              action: aws:invokeLambdaFunction
+              timeoutSeconds: '9200'
+              description: 'Create Table for Client'
+              onFailure: Abort
+              inputs:   
+                FunctionName: !Sub serverless-create-snowflake-table-${opt:stage}-lambda_handler
+                InvocationType: RequestResponse
+                Payload: |
+                    {
+                      "ClientName": "{{ClientName}}",
+                      "BucketName": "{{BucketName}}",
+                      "SecertName": "{{SecertName}}",
+                      "fileName": "{{fileName}}",
+                      "s3Path": "{{s3Path}}",
+                      "TableName": "{{TableName}}",
+                      "Action": "stage"
+                    }   
+            - name: createpipe
+              action: aws:invokeLambdaFunction
+              timeoutSeconds: '9200'
+              description: 'Create Table for Client'
+              onFailure: Abort
+              inputs:   
+                FunctionName: !Sub serverless-create-snowflake-table-${opt:stage}-lambda_handler
+                InvocationType: RequestResponse
+                Payload: |
+                    {
+                      "ClientName": "{{ClientName}}",
+                      "BucketName": "{{BucketName}}",
+                      "SecertName": "{{SecertName}}",
+                      "fileName": "{{fileName}}",
+                      "s3Path": "{{s3Path}}",
+                      "TableName": "{{TableName}}",
+                      "Action": "createpipe"
+                    }   
+
+            - name: sqsnotify
+              action: aws:invokeLambdaFunction
+              timeoutSeconds: '9200'
+              description: 'Create Table for Client'
+              onFailure: Abort
+              inputs:   
+                FunctionName: !Sub serverless-create-snowflake-table-${opt:stage}-lambda_handler
+                InvocationType: RequestResponse
+                Payload: |
+                    {
+                      "ClientName": "{{ClientName}}",
+                      "BucketName": "{{BucketName}}",
+                      "SecertName": "{{SecertName}}",
+                      "fileName": "{{fileName}}",
+                      "s3Path": "{{s3Path}}",
+                      "TableName": "{{TableName}}",
+                      "Action": "createsqs"
+                    }     
+        DocumentType: Automation
+        UpdateMethod: Replace
+    
+custom:
